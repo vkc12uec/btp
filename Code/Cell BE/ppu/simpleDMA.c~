@@ -1,0 +1,105 @@
+/* --------------------------------------------------------------  */
+/* (C)Copyright 2001,2006,                                         */
+/* International Business Machines Corporation,                    */
+/* Sony Computer Entertainment, Incorporated,                      */
+/* Toshiba Corporation,                                            */
+/*                                                                 */
+/* All Rights Reserved.                                            */
+/* --------------------------------------------------------------  */
+/* PROLOG END TAG zYx                                              */
+#include "../simpleDMA.h"
+#include <sched.h>
+#include <libspe.h>
+#include <stdio.h>
+#include <errno.h>
+#include <sys/wait.h>
+#include "/opt/ibm/cell-sdk/prototype/src/lib/misc/malloc_align.h"
+
+#define SPU_THREADS 	8
+
+
+/* we allocate one control block, to correspond to one SPE */
+control_block cb[8] __attribute__ ((aligned (128)));
+
+/* this is the pointer to the SPE code, to be used at thread creation time */
+extern spe_program_handle_t simpleDMA_spu;
+
+/* this is the handle which will be returned by "spe_create_thread."  */
+speid_t speid[SPU_THREADS];
+
+/* this variable is used to return data regarding an abnormal return from the SPE */
+int status;
+
+/* here is the variable to hold the address returned by the malloc() call. */
+int *data;
+
+int main() 
+{
+  int i;
+
+  /* Here is the malloc call a data array aligned to a cacheline boundary 
+     for efficient transfer.
+   */ 
+  data = (int *)_malloc_align(DATA_BUFFER_SIZE, 7);
+
+  if (data) {
+    /* Fill the data array with squares.
+     */
+    
+    for (i=0; i<DATA_BUFFER_ENTRIES; i++) {
+      data[i] = i;
+		printf("%d\n",data[i]);
+    }
+  } else {
+    fprintf(stderr, "Failed to allocate buffer of %d bytes\n", (int)(DATA_BUFFER_SIZE));
+    return 1;
+  }
+
+  if (spe_count_physical_spes() < 1) {
+    fprintf(stderr, "System doesn't have a working SPE.  I'm leaving.\n");
+    return -1;
+  }
+
+  printf("Address being sent in control block: %p\n", data);
+
+  /* load the address into the control blocks */
+	int k;
+	for(k=0;k<8; k++){
+		cb[k].search = 16;
+  		cb[k].addr.p = data;
+		data = data+ DATA_BUFFER_ENTRIES/8;
+	}
+
+int j;
+  /* allocate the SPE tasks */
+for(j=0; j<8; j++){
+  speid[j] = spe_create_thread (SPE_DEF_GRP, &simpleDMA_spu, (unsigned long long *) &cb[j], NULL, -1, 0);
+  if (speid[j] == NULL) {
+    fprintf (stderr, "FAILED: spe_create_thread(num=%d, errno=%d)\n", 0, errno);
+    exit (1);
+  }
+}
+
+
+  /* wait for the single SPE to complete */
+for(i=0;i<8;i++){
+
+  spe_wait(speid[i], &status, 0);
+
+
+  /* returns the SPE status */
+  if (WIFEXITED(status)) {
+    if (WEXITSTATUS(status)) {
+      fprintf(stderr, "FAILED: SPE returned a non-zero exit status\n");
+      exit(1);
+    }
+  } else {
+    fprintf(stderr, "FAILED: SPE abnormally terminated\n");
+    exit(1);
+  }
+
+}
+  printf("PASSED\n");
+
+  return 0;
+}

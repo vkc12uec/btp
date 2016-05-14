@@ -1,0 +1,33 @@
+/* --------------------------------------------------------------  */
+/* (C)Copyright 2001,2006,                                         */
+/* International Business Machines Corporation,                    */
+/* Sony Computer Entertainment, Incorporated,                      */
+/* Toshiba Corporation,                                            */
+/*                                                                 */
+/* All Rights Reserved.                                            */
+/* --------------------------------------------------------------  */
+/* PROLOG END TAG zYx                                              */
+
+#include <spu_mfcio.h>
+#include <stdio.h>
+
+
+
+int main(unsigned long long id) 
+{
+//spe reading from ppe
+       unsigned int data = 0;
+       while(!spu_stat_in_mbox());
+       data = spu_read_in_mbox();
+       char ch = (char)data;
+	   printf("SPU (0x%llx) %d\n", id, data);
+//	   printf("SPU %d\n", data);
+
+//spe giving to ppe
+       data = (unsigned int)'C';
+       while(!spu_stat_out_mbox());
+       spu_write_out_mbox(data);
+
+
+  return 0;
+}
